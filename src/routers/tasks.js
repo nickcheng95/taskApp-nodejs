@@ -2,6 +2,9 @@ const express = require('express');
 const router = new express.Router();
 const Task = require('../models/tasks');
 const auth = require('../middleware/auth')
+const multer = require('multer');
+const sharp = require('sharp');
+const {ObjectID} = require('mongodb')
 
 router.post('/tasks', auth, async(req,res)=>{
     const task = new Task({
@@ -102,6 +105,79 @@ router.delete('/tasks/:id', auth, async(req,res)=>{
 
     }catch(e){
         res.status(500).send(e)
+    }
+})
+
+// upload images for tasks
+const upload = multer({
+    limits:{
+        fileSize: 6000000
+    },
+    fileFilter(req,file,cb){
+        if(!file.originalname.toLowerCase().match(/\.(jpg|jpeg|png)$/)){
+            return cb(new Error('File must be a image'))
+        }
+
+        cb(undefined, true)
+    }
+})
+
+router.post('/tasks/:id/image', auth, upload.single('image'), async(req,res)=>{
+    const buffer = await sharp(req.file.buffer).png().toBuffer()
+    const task = await Task.findOne({_id: req.params.id, owner: req.user._id});
+    if(!task){
+        throw new Error('Task not found')
+    }
+
+    task.images = task.images.concat({image: buffer})
+    await task.save()
+    res.send()
+},(error,req,res,next)=>{
+    res.status(400).send({error: error.message})
+})
+
+router.delete('/tasks/:id/image/:imgid', auth, async(req,res)=>{
+    try{
+        const task = await Task.findOne({_id: req.params.id, owner: req.user._id});
+        if(!task){
+            return res.status(404).send('Task not found')
+        }
+
+        const length = task.images.length
+        if(length === 0){
+            return res.status(404).send('Images not found')
+        }
+
+        task.images = task.images.filter((val) => val._id.toString() !== req.params.imgid)
+
+        if(task.images.length === length){
+            return res.status(404).send('Image not found')
+        }
+        await task.save()
+        res.send()
+
+    }catch(error){
+        res.status(500).send({error: error.message})
+    }
+})
+
+router.get('/tasks/:id/image/:imgid', auth, async(req,res)=>{
+    try{
+        const task = await Task.findOne({_id: req.params.id, owner: req.user._id});
+
+        if(!task){
+            throw new Error('Task not found')
+        }
+
+        const {image} = task.images.find((val)=> val._id.toString() === req.params.imgid)
+        if(!image){
+            throw new Error()
+        }
+        
+        res.set('Content-Type','image/png')
+        res.send(image)
+    }catch(e){
+        res.status(404).send({error: e.message})
     }
 })
 
