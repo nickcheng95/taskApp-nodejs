@@ -139,4 +139,12 @@ router.get('/users/:id/avatar', async(req,res)=>{
     }
 })
 
+router.get('/test', (req,res)=>{
+    try{
+        res.send({text: 'test'})
+    }catch(e){
+        res.status(500).send({error: e.message})
+    }
+})
+
 module.exports = router
